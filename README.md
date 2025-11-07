@@ -20,7 +20,7 @@ This is a minimal but complete scaffold for a **Transaction Wallet Management Sy
 # build image locally
 mvn clean package -DskipTests
 docker-compose up --build
-# app available at http://localhost:8080
+# app available at http://localhost:8080  , http://localhost:8080/swagger-ui.html
 ```
 
 ## Run integration tests (requires Docker)
