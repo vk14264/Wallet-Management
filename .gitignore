@@ -1,0 +1,13 @@
+# Java / Spring
+target/
+*.class
+*.log
+
+# Environment & secrets
+.env
+application.yml
+
+# OS / IDE files
+.idea/
+*.iml
+.DS_Store
