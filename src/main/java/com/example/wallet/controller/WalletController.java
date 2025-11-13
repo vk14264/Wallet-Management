@@ -28,7 +28,7 @@ public class WalletController {
     @GetMapping("/balance")
     public ResponseEntity<?> getBalance(@AuthenticationPrincipal UserDetails userDetails) {
         String username = userDetails.getUsername();
-        Decimal128 balance = walletService.getBalance(username);
+        BigDecimal balance = walletService.getBalance(username);
         return ResponseEntity.ok(Map.of("username", username, "balance", balance));
     }
 

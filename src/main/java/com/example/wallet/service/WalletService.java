@@ -1,5 +1,6 @@
 package com.example.wallet.service;
 
+import com.example.wallet.dto.TransferResponse;
 import com.example.wallet.model.Transaction;
 import com.example.wallet.model.User;
 import com.example.wallet.model.Wallet;
@@ -40,7 +41,7 @@ public class WalletService {
         return walletRepository.save(wallet);
     }
 
-    public Decimal128 getBalance(String username) {
+    public BigDecimal getBalance(String username) {
         Wallet wallet = walletRepository.findByUsername(username)
                 .orElseThrow(() -> new RuntimeException("Wallet not found"));
         return wallet.getBalance();
@@ -51,40 +52,45 @@ public class WalletService {
         return walletRepository.findByUsername(userId).orElseGet(() -> createIfNotExists(userId));
     }
 
-    public Transaction credit(String walletId, BigDecimal amount, String remark) {
-        Query q = Query.query(Criteria.where("id").is(walletId));
-        Update u = new Update().inc("balance", new Decimal128(amount)); // Atomic increment
-        Wallet updated = mongoOperations.findAndModify(
-                q,
-                u,
-                FindAndModifyOptions.options().returnNew(true),
-                Wallet.class
-        );
-        if (updated == null) throw new IllegalArgumentException("Wallet not found");
-
-        Transaction t = new Transaction(walletId, amount, "CREDIT", remark);
-        return transactionRepository.save(t);
-    }
-
-    public Transaction debit(String walletId, BigDecimal amount, String remark) {
-        // Atomic decrement only if balance >= amount
-        Query q = Query.query(Criteria.where("id").is(walletId)
-                .and("balance").gte(new Decimal128(amount)));
-        Update u = new Update().inc("balance", new Decimal128(amount.negate())); // Atomic decrement
-        Wallet updated = mongoOperations.findAndModify(
-                q,
-                u,
-                FindAndModifyOptions.options().returnNew(true),
-                Wallet.class
-        );
-        if (updated == null) throw new IllegalArgumentException("Insufficient balance or wallet not found");
-
-        Transaction t = new Transaction(walletId, amount, "DEBIT", remark);
-        return transactionRepository.save(t);
-    }
-
+    /**
+     * Credit money to wallet (Atomic within one document)
+     */
     @Transactional
-    public Transaction transfer(String fromWalletId, String toWalletId, Decimal128 amount, String remark) {
+    public Transaction credit(String walletId, BigDecimal amount, String remark) {
+        Wallet wallet = walletRepository.findById(walletId)
+                .orElseThrow(() -> new RuntimeException("Wallet not found"));
+
+        wallet.setBalance(wallet.getBalance().add(amount));
+        walletRepository.save(wallet);
+
+        Transaction txn = new Transaction(walletId, amount, "CREDIT", remark);
+        return transactionRepository.save(txn);
+    }
+
+    /**
+     * Debit money from wallet (with balance check)
+     */
+    @Transactional
+    public Transaction debit(String walletId, BigDecimal amount, String remark) {
+        Wallet wallet = walletRepository.findById(walletId)
+                .orElseThrow(() -> new RuntimeException("Wallet not found"));
+
+        if (wallet.getBalance().compareTo(amount) < 0) {
+            throw new RuntimeException("Insufficient balance");
+        }
+
+        wallet.setBalance(wallet.getBalance().subtract(amount));
+        walletRepository.save(wallet);
+
+        Transaction txn = new Transaction(walletId, amount, "DEBIT", remark);
+        return transactionRepository.save(txn);
+    }
+
+    /**
+     * Transfer money between two wallets (ACID across both wallets)
+     */
+    @Transactional
+    public TransferResponse transfer(String fromWalletId, String toWalletId, BigDecimal amount, String remark) {
         if (fromWalletId.equals(toWalletId)) {
             throw new IllegalArgumentException("Cannot transfer to the same wallet");
         }
@@ -94,28 +100,36 @@ public class WalletService {
         Wallet to = walletRepository.findById(toWalletId)
                 .orElseThrow(() -> new RuntimeException("Receiver wallet not found"));
 
-        BigDecimal amt = amount.bigDecimalValue();
-        BigDecimal fromBalance = from.getBalance().bigDecimalValue();
-        BigDecimal toBalance = to.getBalance().bigDecimalValue();
-
-        if (fromBalance.compareTo(amt) < 0) {
+        if (from.getBalance().compareTo(amount) < 0) {
             throw new RuntimeException("Insufficient balance");
         }
 
-        // Convert BigDecimal arithmetic results back to Decimal128
-        from.setBalance(new Decimal128(fromBalance.subtract(amt)));
-        to.setBalance(new Decimal128(toBalance.add(amt)));
+        // Update balances
+        from.setBalance(from.getBalance().subtract(amount));
+        to.setBalance(to.getBalance().add(amount));
 
         walletRepository.save(from);
         walletRepository.save(to);
 
-        Transaction debitTxn = new Transaction(fromWalletId, amt, "DEBIT", "Transfer to " + toWalletId + " - " + remark);
-        Transaction creditTxn = new Transaction(toWalletId, amt, "CREDIT", "Received from " + fromWalletId + " - " + remark);
+        // Create transaction records
+        Transaction debitTxn = new Transaction(
+                fromWalletId,
+                amount,
+                "DEBIT",
+                "Transfer to " + toWalletId + " - " + remark
+        );
+        Transaction creditTxn = new Transaction(
+                toWalletId,
+                amount,
+                "CREDIT",
+                "Received from " + fromWalletId + " - " + remark
+        );
 
         transactionRepository.save(debitTxn);
         transactionRepository.save(creditTxn);
 
-        return debitTxn;
+        // Return both transactions + new balances
+        return new TransferResponse(debitTxn, creditTxn, from.getBalance(), to.getBalance());
     }
 
 

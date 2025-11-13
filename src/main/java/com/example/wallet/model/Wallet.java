@@ -1,6 +1,8 @@
 package com.example.wallet.model;
 
+import lombok.AllArgsConstructor;
 import lombok.Getter;
+import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 import org.bson.types.Decimal128;
 import org.springframework.data.annotation.Id;
@@ -9,13 +11,14 @@ import org.springframework.data.mongodb.core.mapping.Document;
 import java.math.BigDecimal;
 
 @Document(collection = "wallets")
+@AllArgsConstructor
 public class Wallet {
     @Getter
     @Id
     private String id;
     private String username;
     @Setter
-    private Decimal128 balance = Decimal128.POSITIVE_ZERO;
+    private BigDecimal balance = BigDecimal.ZERO;
 
     public Wallet() {}
     public Wallet(String username) {
@@ -24,8 +27,9 @@ public class Wallet {
 
     public Wallet(String username, BigDecimal bal) {
         this.username = username;
-        this.balance = new Decimal128(bal);
+        this.balance = bal;
     }
+
 
     public void setId(String id) {
         this.id = id;
@@ -38,7 +42,7 @@ public class Wallet {
         this.username = userId;
     }
 
-    public Decimal128 getBalance() {
+    public BigDecimal getBalance() {
         return balance;
     }
 }

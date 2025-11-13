@@ -12,6 +12,7 @@ import org.springframework.context.annotation.Configuration;
         info = @Info(title = "Wallet Management API", version = "1.0", description = "JWT-secured wallet system"),
         security = {@SecurityRequirement(name = "bearerAuth")}
 )
+
 @SecurityScheme(
         name = "bearerAuth",
         type = SecuritySchemeType.HTTP,
@@ -20,3 +21,20 @@ import org.springframework.context.annotation.Configuration;
 )
 public class SwaggerConfig {
 }
+
+//@Bean
+//public OpenAPI customOpenAPI() {
+//    return new OpenAPI()
+//            .info(new Info()
+//                    .title("Wallet Management API")
+//                    .version("1.0")
+//                    .description("JWT-secured wallet system"))
+//            .addSecurityItem(new SecurityRequirement().addList("bearerAuth"))
+//            .components(new io.swagger.v3.oas.models.Components()
+//                    .addSecuritySchemes("bearerAuth",
+//                            new SecurityScheme()
+//                                    .name("bearerAuth")
+//                                    .type(SecurityScheme.Type.HTTP)
+//                                    .scheme("bearer")
+//                                    .bearerFormat("JWT")));
+//}

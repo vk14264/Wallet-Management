@@ -42,7 +42,8 @@ public class WalletServiceIntegrationTest {
 
     @Test
     void debitAndCreditAtomic() throws Exception {
-        User u = new User("testuser","pass","t@example.com"); userRepository.save(u);
+        User u = new User("testuser", "pass", "t@example.com");
+        userRepository.save(u);
         Wallet w = walletService.createIfNotExists(u.getUsername());
         Wallet saved = walletRepository.findByUsername(u.getUsername()).orElseThrow();
         // credit 100
@@ -50,8 +51,57 @@ public class WalletServiceIntegrationTest {
         Wallet afterCredit = walletRepository.findById(saved.getId()).orElseThrow();
         Assertions.assertEquals(new BigDecimal("100.00"), afterCredit.getBalance());
         // debit 30
-        walletService.debit(saved.getId(), new BigDecimal("30.00"), "buy"); 
+        walletService.debit(saved.getId(), new BigDecimal("30.00"), "buy");
         Wallet afterDebit = walletRepository.findById(saved.getId()).orElseThrow();
         Assertions.assertEquals(new BigDecimal("70.00"), afterDebit.getBalance());
     }
+
+    @Test
+    void transferAtomicBetweenWallets() {
+        // Create sender and receiver users
+        User sender = new User("alice", "pass", "a@example.com");
+        User receiver = new User("bob", "pass", "b@example.com");
+        userRepository.save(sender);
+        userRepository.save(receiver);
+
+        Wallet fromWallet = walletService.createIfNotExists(sender.getUsername());
+        Wallet toWallet = walletService.createIfNotExists(receiver.getUsername());
+
+        // Credit sender with 200
+        walletService.credit(fromWallet.getId(), new BigDecimal("200.00"), "Initial load");
+
+        // Perform transfer of 50
+        walletService.transfer(fromWallet.getId(), toWallet.getId(), new BigDecimal("50.00"), "Payment");
+
+        // Verify balances after transfer
+        Wallet afterFrom = walletRepository.findById(fromWallet.getId()).orElseThrow();
+        Wallet afterTo = walletRepository.findById(toWallet.getId()).orElseThrow();
+
+        Assertions.assertEquals(new BigDecimal("150.00"), afterFrom.getBalance());
+        Assertions.assertEquals(new BigDecimal("50.00"), afterTo.getBalance());
+    }
+
+    @Test
+    void transferShouldRollbackOnInsufficientFunds() {
+        User u1 = new User("ravi", "pass", "r@example.com");
+        User u2 = new User("neha", "pass", "n@example.com");
+        userRepository.save(u1);
+        userRepository.save(u2);
+
+        Wallet from = walletService.createIfNotExists(u1.getUsername());
+        Wallet to = walletService.createIfNotExists(u2.getUsername());
+
+        walletService.credit(from.getId(), new BigDecimal("30.00"), "initial");
+
+        Assertions.assertThrows(RuntimeException.class, () ->
+                walletService.transfer(from.getId(), to.getId(), new BigDecimal("50.00"), "fail case"));
+
+        Wallet afterFrom = walletRepository.findById(from.getId()).orElseThrow();
+        Wallet afterTo = walletRepository.findById(to.getId()).orElseThrow();
+
+        // Balances should remain unchanged
+        Assertions.assertEquals(new BigDecimal("30.00"), afterFrom.getBalance());
+        Assertions.assertEquals(BigDecimal.ZERO, afterTo.getBalance());
+    }
 }
+
